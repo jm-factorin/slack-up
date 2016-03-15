@@ -2,12 +2,31 @@
     var code = function () {
         var HIDDEN_MESSAGE_KEY = 'conf_hide_msg_ids';
 
-        function channelPageRebuild() {
+        function _sortChannelList($ul) {
+            var $li = $('li.channel', $ul);
+            $li.sort(function (a, b) {
+                function getChannelName(c) {
+                    var $channel = $(c).find('span.overflow_ellipsis')
+                        .first().clone().text().trim().replace(/\r?\n/g, '');
+                    if ($channel.substring(0, 1) == '#') {
+                        $channel = $channel.substring(1).trim();
+                    }
+
+                    return $channel;
+                }
+
+                return getChannelName(a) > getChannelName(b);
+            });
+
+            $ul.empty();
+            $li.each(function(k, v) {
+                $ul.append(v);
+            });
+        }
+
+        function _rebuildClientPage() {
             TS.client.channel_pane.rebuildStarredList();
             TS.client.channel_pane.rebuildChannelList();
-            TS.client.channel_pane.rebuildGroupList();
-            TS.client.channel_pane.rebuildImList();
-            TS.client.channel_pane.rebuildPublicPrivateChannelsList();
         }
 
         var ChangeIconDialog = {
@@ -61,29 +80,53 @@
                         'alias': ChangeIconDialog.escape($('#ch_alias').val().trim())
                     }));
 
-                    channelPageRebuild();
-                    $div.modal("hide");
+                    _rebuildClientPage();
+                    $div.modal('hide');
                 });
-                $div.modal("show");
+                $div.modal('show');
             }
         };
 
+        var _rebuildStarredList = TS.client.channel_pane.rebuildStarredList;
+        TS.client.channel_pane.rebuildStarredList = function() {
+            _rebuildStarredList();
+            _sortChannelList($('ul#starred-list'));
+        };
 
-        var menuChannelItems = TS.templates.menu_channel_items;
+        var _rebuildChannelList = TS.client.channel_pane.rebuildChannelList;
+        TS.client.channel_pane.rebuildChannelList = function() {
+            _rebuildChannelList();
+            _sortChannelList($('ul#channel-list'));
+        };
+
+        var _rebuildMsgs = TS.client.msg_pane.rebuildMsgs;
+        TS.client.msg_pane.rebuildMsgs = function () {
+            _rebuildMsgs();
+            var $containers = $('div.day_container');
+            if (!$containers.length) {
+                return;
+            }
+
+            $containers.each(function (k, v) {
+                var $div = $(v);
+                if ($div.find('div.day_msgs').first().html() == '') {
+                    $div.remove();
+                }
+            });
+        }
+
+        var _menuChannelItems = TS.templates.menu_channel_items;
         TS.templates.menu_channel_items = function (a) {
-            var $div = $('<div>').html(menuChannelItems(a));
+            var $div = $('<div>').html(_menuChannelItems(a));
             var $li = $('<li>', {id: "channel_info_change"}).html('<a>Set Channel Info</a>');
 
             $li.insertAfter($div.find('li.divider').first());
             return $div.html();
         };
 
-        //noinspection JSUnresolvedVariable
-        var buildMsgHTML = TS.templates.builders.buildMsgHTML;
-
-        //noinspection JSUnresolvedVariable
+        var _buildMsgHTML = TS.templates.builders.buildMsgHTML;
         TS.templates.builders.buildMsgHTML = function (O, h) {
-            var $html = buildMsgHTML(O, h);
+            var $html = _buildMsgHTML(O, h);
             try {
                 var $div = $('<div>').html($html);
                 var $msg_id = $div.find('ts-message').first().attr('id');
@@ -104,7 +147,7 @@
                     .attr('data-ts-message-id', $msg_id)
                     .addClass('ts_icon ts_icon_archive')
                     .addClass('ts_tip ts_tip_top ts_tip_float ts_tip_delay_600 ts_tip_hidden')
-                    .append($('<span>').addClass('ts_tip_tip').html('Hide'));
+                    .append($('<span>').addClass('ts_tip_tip').html('Hide for me'));
                 $hide.insertAfter($container.find('a[data-action="copy_link"]'));
 
                 return $div.html();
@@ -114,12 +157,9 @@
             }
         };
 
-        //noinspection JSUnresolvedVariable
-        var memberTemplate = TS.templates.member;
-
-        //noinspection JSUnresolvedVariable
+        var _memberTemplate = TS.templates.member;
         TS.templates.member = function (a) {
-            var html = memberTemplate(a);
+            var html = _memberTemplate(a);
             var $div = $('<div>').html(html);
             var $img = $('<img>');
 
@@ -136,10 +176,7 @@
                 $img.attr('src', 'https://slack.global.ssl.fastly.net/66f9/img/slackbot_24.png');
                 $img.insertAfter($(bot));
             } else {
-                //noinspection JSUnresolvedVariable,JSUnresolvedFunction
                 var user = TS.members.getMemberById($(span).data('member-presence'));
-
-                //noinspection JSUnresolvedVariable
                 $img.attr('src', user.profile.image_24);
                 $img.insertAfter($(span));
             }
@@ -147,10 +184,10 @@
             return $div.html();
         };
 
-        var channelTemplate = TS.templates.channel;
+        var _channelTemplate = TS.templates.channel;
         TS.templates.channel = function (a) {
 
-            var html = channelTemplate(a);
+            var html = _channelTemplate(a);
             var $div = $('<div>').html(html);
             var $id = $div.find('a.channel_name').data('channel-id');
             var $name = $div.find('a.channel_name').attr('href');
@@ -187,9 +224,9 @@
             }
         };
 
-        var messageTemplates = TS.templates.message;
+        var _messageTemplates = TS.templates.message;
         TS.templates.message = function (a) {
-            var html = messageTemplates(a);
+            var html = _messageTemplates(a);
             var $div = $('<div>').html(html);
             var $id = $div.find('ts-message').first().attr('id');
             var msg_ids = JSON.parse(window.localStorage.getItem(HIDDEN_MESSAGE_KEY));
@@ -230,10 +267,9 @@
             TS.client.msg_pane.rebuildMsgs();
         });
 
-        channelPageRebuild();
+        _rebuildClientPage();
     };
 
-    //append to document body
     var script = document.createElement('script');
     script.type = 'text/javascript';
     script.innerHTML = '(' + code.toString() + ')();';
