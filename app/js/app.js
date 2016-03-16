@@ -3,7 +3,7 @@
         var HIDDEN_MESSAGE_KEY = 'conf_hide_msg_ids';
 
         function _sortChannelList($ul) {
-            var $li = $('li.channel', $ul);
+            var $li = $('li', $ul);
             $li.sort(function (a, b) {
                 function getChannelName(c) {
                     var $channel = $(c).find('span.overflow_ellipsis')
@@ -19,21 +19,66 @@
             });
 
             $ul.empty();
-            $li.each(function(k, v) {
+            $li.each(function (k, v) {
                 $ul.append(v);
             });
         }
 
         function _rebuildClientPage() {
+            TS.client.channel_pane.rebuildGroupList();
             TS.client.channel_pane.rebuildStarredList();
             TS.client.channel_pane.rebuildChannelList();
         }
 
-        var ChangeIconDialog = {
-            escape: function (str) {
-                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            },
+        function _injectChangeInfo(html) {
+            var $div = $('<div>').html(html);
+            var $li = $('<li>', {id: "channel_info_change"}).html('<a>Set Channel Info</a>');
 
+            $li.insertAfter($div.find('li.divider').first());
+            return $div.html();
+        }
+
+        function _renderSidebarName(html, type) {
+            var $div = $('<div>').html(html);
+            var $name = $div.find('a.' + type + '_name').attr('href');
+            var $id = $div.find('a.' + type + '_name').data(type + '-id');
+            var icon = (type == 'group') ? 'ts_icon_lock' : 'ts_icon_channel_pane_hash';
+
+            try {
+                var data = ChangeIconDialog.getData($id);
+                if (!data.icon && !data.alias) {
+                    return html;
+                }
+
+                var $ellipsis = $div.find('span.overflow_ellipsis');
+                $ellipsis.empty();
+
+                try {
+                    var $prefix = $(TS.emoji.graphicReplace(data.icon, {force_img: true}));
+                    if ($prefix.attr('src')) {
+                        $prefix.css('margin', '-2px 3px 0 ');
+                    } else {
+                        $prefix = $('<ts-icon>').attr('class', icon + ' prefix');
+                    }
+                } catch (e) {
+                    $prefix = $('<ts-icon>').attr('class', icon + ' prefix');
+                }
+
+                if (type == 'group') {
+                    $div.find('ts-icon').first().remove();
+                }
+
+                var $ch = data.alias ? data.alias : $name.split('/')[2];
+                $ellipsis.prepend($prefix);
+                $ellipsis.append($ch);
+                return $div.html();
+            } catch (e) {
+                console.error(e);
+                return html;
+            }
+        }
+
+        var ChangeIconDialog = {
             getData: function (id) {
                 var json = window.localStorage.getItem(ChangeIconDialog.getChannelKey(id));
                 return json ? JSON.parse(json) : {"icon": "", "alias": ""};
@@ -58,11 +103,10 @@
                 var $div = $('div#change_icon_dialog');
                 if (!$div.length) {
                     $div = $('<div>', {
-                            "id": "change_icon_dialog",
-                            "class": "modal hide fade in",
-                            "aria-hidden": "false"
-                        }
-                    ).html(ChangeIconDialog.html());
+                        "id": "change_icon_dialog",
+                        "class": "modal hide fade in",
+                        "aria-hidden": "false"
+                    }).html(ChangeIconDialog.html());
                     $(document.body).append($div);
                 }
 
@@ -76,8 +120,8 @@
                 $div.find('a.btn_save').click(function (e) {
                     e.preventDefault();
                     window.localStorage.setItem(ChangeIconDialog.getChannelKey(TS.model.active_cid), JSON.stringify({
-                        'icon': ChangeIconDialog.escape($('#ch_icon').val().trim()),
-                        'alias': ChangeIconDialog.escape($('#ch_alias').val().trim())
+                        'icon': TS.utility.htmlEntities($('#ch_icon').val().trim()),
+                        'alias': TS.utility.htmlEntities($('#ch_alias').val().trim())
                     }));
 
                     _rebuildClientPage();
@@ -88,13 +132,13 @@
         };
 
         var _rebuildStarredList = TS.client.channel_pane.rebuildStarredList;
-        TS.client.channel_pane.rebuildStarredList = function() {
+        TS.client.channel_pane.rebuildStarredList = function () {
             _rebuildStarredList();
             _sortChannelList($('ul#starred-list'));
         };
 
         var _rebuildChannelList = TS.client.channel_pane.rebuildChannelList;
-        TS.client.channel_pane.rebuildChannelList = function() {
+        TS.client.channel_pane.rebuildChannelList = function () {
             _rebuildChannelList();
             _sortChannelList($('ul#channel-list'));
         };
@@ -118,11 +162,12 @@
 
         var _menuChannelItems = TS.templates.menu_channel_items;
         TS.templates.menu_channel_items = function (a) {
-            var $div = $('<div>').html(_menuChannelItems(a));
-            var $li = $('<li>', {id: "channel_info_change"}).html('<a>Set Channel Info</a>');
+            return _injectChangeInfo(_menuChannelItems(a))
+        };
 
-            $li.insertAfter($div.find('li.divider').first());
-            return $div.html();
+        var _menuGroupItems = TS.templates.menu_group_items;
+        TS.templates.menu_group_items = function (a) {
+            return _injectChangeInfo(_menuGroupItems(a))
         };
 
         var _buildMsgHTML = TS.templates.builders.buildMsgHTML;
@@ -177,41 +222,14 @@
 
         var _channelTemplate = TS.templates.channel;
         TS.templates.channel = function (a) {
-
             var html = _channelTemplate(a);
-            var $div = $('<div>').html(html);
-            var $id = $div.find('a.channel_name').data('channel-id');
-            var $name = $div.find('a.channel_name').attr('href');
+            return _renderSidebarName(html, 'channel');
+        };
 
-            try {
-                var data = ChangeIconDialog.getData($id);
-
-                if (!data.icon && !data.alias) {
-                    return html;
-                }
-
-                var $ellipsis = $div.find('span.overflow_ellipsis');
-                $ellipsis.empty();
-
-                try {
-                    var $prefix = $(TS.emoji.graphicReplace(data.icon, {force_img: true}));
-                    if ($prefix.attr('src')) {
-                        $prefix.css('margin', '-2px 3px 0 ');
-                    } else {
-                        $prefix = $('<ts-icon>').attr('class', 'ts_icon_channel_pane_hash prefix');
-                    }
-                } catch (e) {
-                    $prefix = $('<ts-icon>').attr('class', 'ts_icon_channel_pane_hash prefix');
-                }
-
-                var $ch = data.alias ? data.alias : $name.split('/')[2];
-                $ellipsis.prepend($prefix);
-                $ellipsis.append($ch);
-                return $div.html();
-            } catch (e) {
-                console.error(e);
-                return html;
-            }
+        var _groupTemplate = TS.templates.group;
+        TS.templates.group = function (a) {
+            var html = _groupTemplate(a);
+            return _renderSidebarName(html, 'group');
         };
 
         var _messageTemplates = TS.templates.message;
@@ -229,7 +247,7 @@
 
         $(document.body).on('click', '[id="channel_info_change"]', function (e) {
             e.preventDefault();
-            ChangeIconDialog.show(TS.menu.channel.name);
+            ChangeIconDialog.show(TS.shared.getActiveModelOb().name);
             TS.menu.end();
         });
 
