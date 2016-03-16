@@ -109,7 +109,8 @@
 
             $containers.each(function (k, v) {
                 var $div = $(v);
-                if ($div.find('div.day_msgs').first().html() == '') {
+                var $day_msgs = $div.find('div.day_msgs');
+                if (!$day_msgs.length || $day_msgs.first().html() == '') {
                     $div.remove();
                 }
             });
@@ -130,17 +131,7 @@
             try {
                 var $div = $('<div>').html($html);
                 var $msg_id = $div.find('ts-message').first().attr('id');
-                var $url = $div.find('a.message_sender').attr('href');
                 var $container = $div.find('div.action_hover_container');
-                if ($url) {
-                    var $mention = $('<a>')
-                        .attr('data-action', 'mention')
-                        .attr('data-user', $url.split('/')[2])
-                        .addClass('ts_icon ts_icon_mentions')
-                        .addClass('ts_tip ts_tip_top ts_tip_float ts_tip_delay_600 ts_tip_hidden')
-                        .append($('<span>').addClass('ts_tip_tip').html('Mention'));
-                    $container.prepend($mention);
-                }
 
                 var $hide = $('<a>')
                     .attr('data-action', 'hide')
@@ -207,12 +198,11 @@
                     if ($prefix.attr('src')) {
                         $prefix.css('margin', '-2px 3px 0 ');
                     } else {
-                        $prefix = $('<span class="prefix"># </span>');
+                        $prefix = $('<ts-icon>').attr('class', 'ts_icon_channel_pane_hash prefix');
                     }
                 } catch (e) {
-                    $prefix = $('<span class="prefix"># </span>');
+                    $prefix = $('<ts-icon>').attr('class', 'ts_icon_channel_pane_hash prefix');
                 }
-
 
                 var $ch = data.alias ? data.alias : $name.split('/')[2];
                 $ellipsis.prepend($prefix);
@@ -241,19 +231,6 @@
             e.preventDefault();
             ChangeIconDialog.show(TS.menu.channel.name);
             TS.menu.end();
-        });
-
-        $(document.body).on('click', '[data-action="mention"]', function (e) {
-            var $input = $("textarea#message-input");
-            if ($input.prop('disabled')) {
-                return;
-            }
-
-            var $msg = $input.val() + '@' + $(e.target).data('user');
-            $input.val($msg.trim() + ' ')
-                .trigger("autosize")
-                .trigger("autosize-resize")
-                .focus();
         });
 
         $(document.body).on('click', '[data-action="hide"]', function (e) {
