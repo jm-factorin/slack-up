@@ -15,7 +15,7 @@
                     return $channel;
                 }
 
-                return getChannelName(a) > getChannelName(b);
+                return getChannelName(a).localeCompare(getChannelName(b));
             });
 
             $ul.empty();
