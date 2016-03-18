@@ -1,23 +1,24 @@
 (function () {
     var code = function () {
         var HIDDEN_MESSAGE_KEY = 'conf_hide_msg_ids';
-        var SLACKBOT_ICON_URL = 'https://slack.global.ssl.fastly.net/66f9/img/slackbot_24.png';
+
+        function _sort(a, b) {
+            function getChannelName(c) {
+                var $channel = $(c).find('span.overflow_ellipsis')
+                    .first().clone().text().trim().replace(/\r?\n/g, '');
+                if ($channel.substring(0, 1) == '#') {
+                    $channel = $channel.substring(1).trim();
+                }
+
+                return $channel;
+            }
+
+            return getChannelName(a).localeCompare(getChannelName(b));
+        }
 
         function _sortChannelList($ul) {
             var $li = $('li', $ul);
-            $li.sort(function (a, b) {
-                function getChannelName(c) {
-                    var $channel = $(c).find('span.overflow_ellipsis')
-                        .first().clone().text().trim().replace(/\r?\n/g, '');
-                    if ($channel.substring(0, 1) == '#') {
-                        $channel = $channel.substring(1).trim();
-                    }
-
-                    return $channel;
-                }
-
-                return getChannelName(a).localeCompare(getChannelName(b));
-            });
+            $li.sort(_sort);
 
             $ul.empty();
             $li.each(function (k, v) {
@@ -182,7 +183,7 @@
                 "id" : "hide_link",
                 "class": "danger",
                 "data-ts-message-id": TS.templates.makeMsgDomId(a.msg.ts)
-            }).html('<a>Hide message</a>');
+            }).html('<a>Hide message (for me)</a>');
 
             if (!$div.find('li.divider').length) {
                 $div.append($('<li>', {"class": "divider"}));
