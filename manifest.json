@@ -1,10 +1,9 @@
 {
     "name": "Slack-Up",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "manifest_version": 2,
     "short_name": "slack-up",
-    "description": "Level-up your slack page with DM/Channel alias + icons and 'Hide for me' button",
-    "update_url": "https://raw.githubusercontent.com/jm-factorin/slack-up/master/updates.xml",
+    "description": "Level-up your slack page with DM/Channel alias + icons and 'Hide message' action button",
     "icons": {
         "128": "icon/128.png"
     },

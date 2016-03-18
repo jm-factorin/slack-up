@@ -1,6 +1,7 @@
 (function () {
     var code = function () {
         var HIDDEN_MESSAGE_KEY = 'conf_hide_msg_ids';
+        var SLACKBOT_ICON_URL = 'https://slack.global.ssl.fastly.net/66f9/img/slackbot_24.png';
 
         function _sortChannelList($ul) {
             var $li = $('li', $ul);
@@ -25,6 +26,7 @@
         }
 
         function _rebuildClientPage() {
+            TS.client.channel_pane.rebuildImList();
             TS.client.channel_pane.rebuildGroupList();
             TS.client.channel_pane.rebuildStarredList();
             TS.client.channel_pane.rebuildChannelList();
@@ -91,12 +93,18 @@
             html: function () {
                 return '<div class="modal-header"><button type="button" class="close" data-dismiss="modal" '
                     + 'aria-hidden="true">×</button><h3>Set info for channel #<span id="ch_title"></span></h3></div>'
-                    + '<div class="modal-body"><p>Change channel emoji icon. Paste your emoji name here like '
-                    + '<code>:book:</code></p><input type="text" id="ch_icon" value="" class="with-emoji-menu"'
-                    + ' style="display:inline-block; width: 100%"/>'
-                    + '<p style="margin-top: 20px">Add channel alias. Set a custom sidebar name for this channel</p>'
-                    + '<input type="text" id="ch_alias" value="" style="display:inline-block; width: 100%"/>'
-                    + '</p></div><div class="modal-footer"><a class="btn btn_save">Save</a></div>';
+                    + '<div class="modal-body"><p class="top_margin">'
+                    + '<label for="ch_alias" class="inline_block">Sidebar Alias</label>'
+                    + '<input id="ch_alias" type="text" class="small">'
+                    + '<span class="modal_input_note">Add channel alias. '
+                    + 'Set a custom sidebar name for this channel.</span>'
+                    + '</p><p class="top_margin">'
+                    + '<label for="ch_icon" class="inline_block">Emoji Icon</label>'
+                    + '<input id="ch_icon" type="text" class="small">'
+                    + '<span class="modal_input_note">Change channel emoji icon. '
+                    + 'Paste your emoji code here like <code>:book:</code></span>'
+                    + '</p></div>'
+                    + '<div class="modal-footer"><a class="btn btn_save">Save Settings</a></div>';
             },
 
             show: function (title) {
@@ -114,9 +122,6 @@
                 $div.find('#ch_icon').val(data.icon);
                 $div.find('#ch_alias').val($('<span>').html(data.alias).text());
                 $div.find('span#ch_title').text(title);
-                $div.find('span.ch_preview').click(function (e) {
-                    TS.emoji_menu.startEmo(e, "#ch_icon")
-                });
                 $div.find('a.btn_save').click(function (e) {
                     e.preventDefault();
                     window.localStorage.setItem(ChangeIconDialog.getChannelKey(TS.model.active_cid), JSON.stringify({
@@ -170,27 +175,21 @@
             return _injectChangeInfo(_menuGroupItems(a))
         };
 
-        var _buildMsgHTML = TS.templates.builders.buildMsgHTML;
-        TS.templates.builders.buildMsgHTML = function (O, h) {
-            var $html = _buildMsgHTML(O, h);
-            try {
-                var $div = $('<div>').html($html);
-                var $msg_id = $div.find('ts-message').first().attr('id');
-                var $container = $div.find('div.action_hover_container');
+        var _menuMessageActionItems = TS.templates.menu_message_action_items;
+        TS.templates.menu_message_action_items = function (a) {
+            var $div = $('<div>').html(_menuMessageActionItems(a));
+            var $li = $('<li>', {
+                "id" : "hide_link",
+                "class": "danger",
+                "data-ts-message-id": TS.templates.makeMsgDomId(a.msg.ts)
+            }).html('<a>Hide message</a>');
 
-                var $hide = $('<a>')
-                    .attr('data-action', 'hide')
-                    .attr('data-ts-message-id', $msg_id)
-                    .addClass('ts_icon ts_icon_archive')
-                    .addClass('ts_tip ts_tip_top ts_tip_float ts_tip_delay_600 ts_tip_hidden')
-                    .append($('<span>').addClass('ts_tip_tip').html('Hide for me'));
-                $hide.insertAfter($container.find('a[data-action="copy_link"]'));
-
-                return $div.html();
-            } catch (e) {
-                console.error(e);
-                return $html;
+            if (!$div.find('li.divider').length) {
+                $div.append($('<li>', {"class": "divider"}));
             }
+
+            $div.append($li);
+            return $div.html();
         };
 
         var _memberTemplate = TS.templates.member;
@@ -199,22 +198,18 @@
             var $div = $('<div>').html(html);
             var $img = $('<img>');
 
+            $img.attr('src', a.member.profile.image_24);
             $img.css('display', 'inline-block');
             $img.css('margin', '0 0 5px 5px');
             $img.css('border-radius', '3px');
             $img.css('height', '20px');
             $img.css('width', '20px');
 
-            var span = $div.find('span.presence')[0];
-            var bot = $div.find('i.slackbot_icon')[0];
-
-            if (bot) {
-                $img.attr('src', 'https://slack.global.ssl.fastly.net/66f9/img/slackbot_24.png');
-                $img.insertAfter($(bot));
+            var $bot = $div.find('i.slackbot_icon');
+            if ($bot.length) {
+                $img.insertAfter($($bot));
             } else {
-                var user = TS.members.getMemberById($(span).data('member-presence'));
-                $img.attr('src', user.profile.image_24);
-                $img.insertAfter($(span));
+                $img.insertAfter($div.find('span.presence').first());
             }
 
             return $div.html();
@@ -251,9 +246,8 @@
             TS.menu.end();
         });
 
-        $(document.body).on('click', '[data-action="hide"]', function (e) {
-            var $id = $(e.target).data('ts-message-id');
-
+        $(document.body).on('click', '[id="hide_link"]', function (e) {
+            var $id = $(this).data('ts-message-id');
             var data = JSON.parse(window.localStorage.getItem(HIDDEN_MESSAGE_KEY));
             data = data ? data : {};
             data[$id] = true;
