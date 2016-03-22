@@ -241,6 +241,28 @@
             return html;
         };
 
+        var _channelHeaderTemplates = TS.templates.channel_header;
+        TS.templates.channel_header = function (a) {
+            var $div = $('<div>').html(_channelHeaderTemplates(a));
+            if (boot_data.hasOwnProperty('other_accounts') && Object.keys(boot_data.other_accounts).length) {
+                var $container = $('<div>', {"class": "team_list_info"});
+                var keys = Object.keys(boot_data.other_accounts);
+                keys.forEach(function(k) {
+                    var html = '<a class="blue_hover channel_actions_toggle channel_header_icon ts_tip ts_tip_bottom"'
+                        + ' href="' + boot_data.other_accounts[k]['team_url'] + '">'
+                        + '<span class="ts_tip_tip">' + boot_data.other_accounts[k]['team_name'] + '</span>'
+                        + '<img style="border-radius:3px;width:24px;height:24px;margin:4px 3px 0 0"'
+                        + ' src="' + boot_data.other_accounts[k]["team_icon"]["image_34"] + '"></a>';
+
+                    $container.append(html);
+                });
+
+                $container.append('<div class="divider_bar">');
+                $div.append($container);
+            }
+            return $div.html();
+        };
+
         $(document.body).on('click', '[id="channel_info_change"]', function (e) {
             e.preventDefault();
             ChangeIconDialog.show(TS.shared.getActiveModelOb().name);
