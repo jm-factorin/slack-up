@@ -1,15 +1,17 @@
 (function () {
     var code = function () {
-        var HIDDEN_MESSAGE_KEY = 'conf_hide_msg_ids';
-        var CONF_PREFIX = 'conf_sidebar_';
+        var excludedConsoleMsgSubstr = ['slackup_settings', 'channel_pref_change'];
+        var slackupConnectUrl = 'https://slackup.marlosoft.net';
+        var sidebarSettingsPrefix = 'conf_sidebar_';
+        var hiddenMessageKey = 'conf_hide_msg_ids';
+        var slackupApiConf = 'conf_slackup_api_conf';
+        var authWindow = null;
 
         function _sort(a, b) {
             function getChannelName(c) {
                 var $channel = $(c).find('span.overflow_ellipsis')
                     .first().clone().text().trim().replace(/\r?\n/g, '');
-                if ($channel.substring(0, 1) == '#') {
-                    $channel = $channel.substring(1).trim();
-                }
+                if ($channel.substring(0, 1) == '#') $channel = $channel.substring(1).trim();
 
                 return $channel;
             }
@@ -28,20 +30,18 @@
         }
 
         function _rebuildClientPage() {
-            TS.client.channel_pane.rebuildImList();
-            TS.client.channel_pane.rebuildGroupList();
             TS.client.channel_pane.rebuildStarredList();
-            TS.client.channel_pane.rebuildChannelList();
+            TS.client.channel_pane.rebuildPublicPrivateChannelsList();
         }
 
         function _getConfData(id) {
-            var json = window.localStorage.getItem(CONF_PREFIX + id);
+            var json = window.localStorage.getItem(sidebarSettingsPrefix + id);
             return json ? JSON.parse(json) : {"icon": "", "alias": ""};
         }
 
-        function _injectChangeInfo(html) {
+        function _injectChangPref(html) {
             var $div = $('<div>').html(html);
-            var $li = $('<li>', {id: "channel_info_change"}).html('<a>Set Channel Info</a>');
+            var $li = $('<li>', {id: "channel_pref_change"}).html('<a>Channel preferences ...</a>');
 
             $li.insertAfter($div.find('li.divider').first());
             return $div.html();
@@ -55,9 +55,7 @@
 
             try {
                 var data = _getConfData($id);
-                if (!data.icon && !data.alias) {
-                    return html;
-                }
+                if (!data.icon && !data.alias) return html;
 
                 var $ellipsis = $div.find('span.overflow_ellipsis');
                 $ellipsis.empty();
@@ -73,35 +71,30 @@
                     $prefix = $('<ts-icon>').attr('class', icon + ' prefix');
                 }
 
-                if (type == 'group') {
-                    $div.find('ts-icon').first().remove();
-                }
+                if (type == 'group') $div.find('ts-icon').first().remove();
 
                 var $ch = data.alias ? data.alias : $name.split('/')[2];
                 $ellipsis.prepend($prefix);
                 $ellipsis.append($ch);
                 return $div.html();
             } catch (e) {
-                console.error(e);
                 return html;
             }
         }
 
-        function _getChannelConfSettings() {
+        function _getConfigSettings() {
             var json = {};
             var keys = Object.keys(window.localStorage);
             for (var i = 0; i < keys.length; i++) {
                 var k = keys[i];
-                if (k.indexOf(CONF_PREFIX) == 0) {
-                    json[k] = JSON.parse(window.localStorage[k]);
-                }
+                if (k.indexOf(sidebarSettingsPrefix) == 0) json[k] = JSON.parse(window.localStorage[k]);
             }
 
             return json;
         }
 
         function _downloadConfigFile() {
-            var data = JSON.stringify(_getChannelConfSettings());
+            var data = JSON.stringify(_getConfigSettings());
             var blob = new Blob([data]);
             var e = document.createEvent("HTMLEvents");
             e.initEvent("click");
@@ -111,26 +104,27 @@
             }).get(0).dispatchEvent(e);
         }
 
+        function _setupConfigFile(conf) {
+            var keys = Object.keys(conf);
+            for (var i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                if (key.indexOf(sidebarSettingsPrefix) == 0) {
+                    window.localStorage.setItem(key, JSON.stringify({
+                        'icon': conf[key].icon,
+                        'alias': conf[key].alias
+                    }));
+                }
+            }
+            _rebuildClientPage();
+        }
+
         function _uploadConfigFile(e) {
             try {
                 var file = e.target.files[0];
                 if (file != null) {
                     var reader = new FileReader();
-                    reader.addEventListener('load', function(evt) {
-                        var conf = JSON.parse(evt.target.result);
-                        var keys = Object.keys(conf);
-                        for (var i = 0; i < keys.length; i++) {
-                            var key = keys[i];
-                            if (key.indexOf(CONF_PREFIX) == 0) {
-                                window.localStorage.setItem(key, JSON.stringify({
-                                    'icon': conf[key].icon,
-                                    'alias': conf[key].alias
-                                }));
-                            }
-                        }
-
-                        _rebuildClientPage();
-                        TS.ui.inline_saver.show({target: TS.generic_dialog.div.find('a#upload_conf_btn')});
+                    reader.addEventListener('load', function (evt) {
+                        _setupConfigFile(JSON.parse(evt.target.result));
                     });
                     reader.readAsText(file);
                 }
@@ -139,16 +133,10 @@
             }
         }
 
-        function _buildImportExportDialog() {
-            return '<p class="bold no_bottom_margin">'
-                + '<a id="download_conf_btn" class="bold">Export channel configuration file</a></p>'
-                + '<p style="line-height:1.25rem;">Download all your channel settings to a json file. '
-                + 'You can share this to others to sync their settings with yours.</p>'
-                + '<p class="bold no_bottom_margin"><a id="upload_conf_btn" class="bold">'
-                + 'Import channel setting json file</a></p>'
-                + '<input type="file" style="display:none" id="import_json" accept=".json" />'
-                + '<p style="line-height: 1.25rem;margin-bottom:0">'
-                + 'Upload <code>json</code> file and automatically update your channel aliases and icons</p>';
+        function _showSlackupPrefDialog() {
+            var $contents = $("#fs_modal").find('.contents');
+            $contents.html(_buildSlackupPrefDialog);
+            $contents.find('input#import_json').change(_uploadConfigFile);
         }
 
         function _buildChangeChannelInfoDialog() {
@@ -164,33 +152,52 @@
                 + 'Paste your emoji code here like <code>:book:</code></span></p>';
         }
 
-        function _showImportExportModalDialog() {
-            TS.generic_dialog.start({
-                title: "SlackUp Preferences",
-                body: _buildImportExportDialog(),
-                show_cancel_button: true,
-                show_go_button: false,
-                esc_for_ok: false,
-                onShow: function () {
-                    TS.generic_dialog.div
-                        .find(".modal-footer")
-                        .addClass("hidden");
-                }
-            });
+        function _buildSlackupPrefDialog() {
+            var html = '<h2 id="prefs_slackup_local" class="inline_block">File Options</h2>'
+                + '<p><a href="#" id="download_conf_btn" class="bold">'
+                + '<i class="ts_icon ts_icon_download ts_icon_inherit"></i> Download</a> '
+                + 'all your channel settings to a json file. You can share this to others to sync '
+                + ' their settings with yours.</p>'
+                + '<input data-inline-saver="#prefs_slackup_local" type="file" style="display:none" id="import_json"'
+                + ' accept=".json" /><a id="upload_conf_btn" class="bold" data-inline-saver="#prefs_slackup_local">'
+                + '<i class="ts_icon ts_icon_upload ts_icon_inherit"></i> '
+                + 'Upload</a> a json configuration file and '
+                + 'automatically update your channel aliases and icons</p><hr/>'
+                + '<h2 id="prefs_slackup_online" class="inline_block small_bottom_margin">Slackup Connect!</h2>';
 
-            TS.generic_dialog.div
-                .find('.modal-body input#import_json')
-                .change(_uploadConfigFile);
+            if (window.localStorage.getItem(slackupApiConf) !== null) {
+                var $emoji = $(TS.emoji.graphicReplace(':sunglasses:', {force_img: true}));
+                $emoji.addClass('emoji-sizer');
+                slackupApiData = JSON.parse(window.localStorage.getItem(slackupApiConf));
+                html += '<p>Heads up! <code>' + slackupApiData.userEmail + '</code> '
+                    + '<small><a href="#" id="unlinkSlackupConnect">unlink</a></small>'
+                    + '<br/><input type="hidden" id="slackupApiToken" value="' + slackupApiData.apiToken + '" />'
+                    + 'With slackup connect! you can easily restore you previous setting or backup your current '
+                    + 'configuration instantly. No more hassle to download, upload and share files. '
+                    + 'Just a few clicks away and you are ready to go! '
+                    + $emoji[0].outerHTML + '<br/><br/>'
+                    + '<button class="btn btn-sc" id="slackupBackup" data-loading-text="Creating backup ..."'
+                    + 'style="min-width:200px">Backup Now</button>'
+                    + '<br/><br/><button class="btn btn-sc btn_info" data-loading-text="Restoring data ..." '
+                    + 'id="slackupRestore" style="min-width:200px">Restore Settings</button>'
+
+            } else {
+                html += '<p>Login to Slackup Connect! to backup or restore your current setting online.</p>'
+                    + '<button id="slack-up-gauth" class="btn">Login using Google</button><br/>';
+            }
+
+            return html;
         }
 
         function _showChangeChannelInfoDialog() {
+            channelPrefifx = TS.shared.getActiveModelOb().is_group ? "" : "#";
             TS.generic_dialog.start({
-                title: "Set info for channel #" + TS.shared.getActiveModelOb().name,
+                title: "Channel Preferences: " + channelPrefifx + TS.shared.getActiveModelOb().name,
                 body: _buildChangeChannelInfoDialog(),
                 show_cancel_button: true,
                 show_go_button: true,
                 go_button_text: "Save Settings",
-                esc_for_ok: false,
+                esc_for_ok: true,
                 onShow: function () {
                     var $div = TS.generic_dialog.div;
                     var data = _getConfData(TS.model.active_cid);
@@ -198,12 +205,12 @@
                     $div.find('#ch_alias').val($('<span>').html(data.alias).text());
                     $div.find('#ch_icon').val(data.icon);
                 },
-                onGo: function() {
+                onGo: function () {
                     var $div = TS.generic_dialog.div;
                     var $icon = $div.find('#ch_icon').val().trim();
                     var $alias = $div.find('#ch_alias').val().trim();
 
-                    window.localStorage.setItem(CONF_PREFIX + TS.model.active_cid, JSON.stringify({
+                    window.localStorage.setItem(sidebarSettingsPrefix + TS.model.active_cid, JSON.stringify({
                         'icon': TS.utility.htmlEntities($icon),
                         'alias': TS.utility.htmlEntities($alias)
                     }));
@@ -214,15 +221,33 @@
 
         }
 
+        var _tsError = TS.error;
+        TS.error = function () {
+            for (var k in excludedConsoleMsgSubstr) {
+                if (arguments[0].indexOf(excludedConsoleMsgSubstr[k]) > -1) return;
+            }
+
+            _tsError(arguments[0])
+        };
+
+        var _tsWarn = TS.warn;
+        TS.warn = function () {
+            for (var k in excludedConsoleMsgSubstr) {
+                if (arguments[0].indexOf(excludedConsoleMsgSubstr[k]) > -1) return;
+            }
+
+            _tsError(arguments[0])
+        };
+
         var _rebuildStarredList = TS.client.channel_pane.rebuildStarredList;
         TS.client.channel_pane.rebuildStarredList = function () {
             _rebuildStarredList();
             _sortChannelList($('ul#starred-list'));
         };
 
-        var _rebuildChannelList = TS.client.channel_pane.rebuildChannelList;
-        TS.client.channel_pane.rebuildChannelList = function () {
-            _rebuildChannelList();
+        var _rebuildPublicPrivateChannelsList = TS.client.channel_pane.rebuildPublicPrivateChannelsList;
+        TS.client.channel_pane.rebuildPublicPrivateChannelsList = function () {
+            _rebuildPublicPrivateChannelsList();
             _sortChannelList($('ul#channel-list'));
         };
 
@@ -230,27 +255,23 @@
         TS.client.msg_pane.rebuildMsgs = function () {
             _rebuildMsgs();
             var $containers = $('div.day_container');
-            if (!$containers.length) {
-                return;
-            }
+            if (!$containers.length) return;
 
             $containers.each(function (k, v) {
                 var $div = $(v);
                 var $day_msgs = $div.find('div.day_msgs');
-                if (!$day_msgs.length || $day_msgs.first().html() == '') {
-                    $div.remove();
-                }
+                if (!$day_msgs.length || $day_msgs.first().html() == '') $div.remove();
             });
         }
 
         var _menuChannelItems = TS.templates.menu_channel_items;
         TS.templates.menu_channel_items = function (a) {
-            return _injectChangeInfo(_menuChannelItems(a))
+            return _injectChangPref(_menuChannelItems(a))
         };
 
         var _menuGroupItems = TS.templates.menu_group_items;
         TS.templates.menu_group_items = function (a) {
-            return _injectChangeInfo(_menuGroupItems(a))
+            return _injectChangPref(_menuGroupItems(a))
         };
 
         var _menuMessageActionItems = TS.templates.menu_message_action_items;
@@ -262,9 +283,7 @@
                 "data-ts-message-id": TS.templates.makeMsgDomId(a.msg.ts)
             }).html('<a>Hide message (for me)</a>');
 
-            if (!$div.find('li.divider').length) {
-                $div.append($('<li>', {"class": "divider"}));
-            }
+            if (!$div.find('li.divider').length) $div.append($('<li>', {"class": "divider"}));
 
             $div.append($li);
             return $div.html();
@@ -310,10 +329,8 @@
             var html = _messageTemplates(a);
             var $div = $('<div>').html(html);
             var $id = $div.find('ts-message').first().attr('id');
-            var msg_ids = JSON.parse(window.localStorage.getItem(HIDDEN_MESSAGE_KEY));
-            if (msg_ids && msg_ids.hasOwnProperty($id) && msg_ids[$id]) {
-                return '';
-            }
+            var msg_ids = JSON.parse(window.localStorage.getItem(hiddenMessageKey));
+            if (msg_ids && msg_ids.hasOwnProperty($id) && msg_ids[$id]) return '';
 
             return html;
         };
@@ -340,19 +357,20 @@
             return $div.html();
         };
 
-        var _menuStartWithTeamAndUser = TS.menu.startWithTeamAndUser;
-        TS.menu.startWithTeamAndUser = function (e) {
-            _menuStartWithTeamAndUser(e);
-            var $ul = $('section.slack_menu_you ul.menu_list');
-            var $li = $('<li>', {"id": "import_export_dialog", "role": "menuitem"});
-            var $a = $('<a>');
+        var _uiPrefsDialogStart = TS.ui.prefs_dialog.start;
+        TS.ui.prefs_dialog.start = function (a, b, c) {
+            a = (a == null) ? 'notifications' : a;
+            _uiPrefsDialogStart(a, b, c);
+        }
 
-            $a.html('SlackUp Preferences');
-            $li.append($a);
-            $ul.append($li);
+        var _templatesPrefSidebar = TS.templates.prefs_sidebar;
+        TS.templates.prefs_sidebar = function (a, b) {
+            var html = _templatesPrefSidebar(a, b);
+            html += '<li><a data-section="slackup_settings">Slackup Options</a></li>';
+            return html;
         };
 
-        $(document.body).on('click', '[id="channel_info_change"]', function (e) {
+        $(document.body).on('click', '[id="channel_pref_change"]', function (e) {
             e.preventDefault();
             TS.menu.end();
             _showChangeChannelInfoDialog();
@@ -360,19 +378,12 @@
 
         $(document.body).on('click', '[id="hide_link"]', function (e) {
             var $id = $(this).data('ts-message-id');
-            var data = JSON.parse(window.localStorage.getItem(HIDDEN_MESSAGE_KEY));
+            var data = JSON.parse(window.localStorage.getItem(hiddenMessageKey));
             data = data ? data : {};
             data[$id] = true;
 
-            window.localStorage.setItem(HIDDEN_MESSAGE_KEY, JSON.stringify(data));
+            window.localStorage.setItem(hiddenMessageKey, JSON.stringify(data));
             TS.client.msg_pane.rebuildMsgs();
-        });
-
-        $(document.body).on('click', '[id="import_export_dialog"]', function (e) {
-            e.preventDefault();
-            clearTimeout(TS.menu.end_time);
-            TS.menu.end();
-            _showImportExportModalDialog();
         });
 
         $(document.body).on('click', '[id="download_conf_btn"]', function (e) {
@@ -385,7 +396,94 @@
             $('input#import_json').trigger('click');
         });
 
-        _rebuildClientPage();
+        $(document.body).on('click', '[data-section="slackup_settings"]', function (e) {
+            e.preventDefault();
+            _showSlackupPrefDialog();
+        });
+
+        $(document.body).on('click', 'button#slack-up-gauth', function (e) {
+            e.preventDefault();
+            $(this).prop('enabled', false);
+            var w = 500;
+            var h = 500;
+            var left = (screen.width / 2) - (w / 2);
+            var top = (screen.height / 2) - (h / 2);
+            var windowName = "Slack-Up Connect!";
+            var windowFeatures = 'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=no, '
+                + 'resizable=no, copyhistory=no, width=' + w + ', height=' + h + ', top=' + top + ', left=' + left;
+
+            authWindow = window.open(slackupConnectUrl + '/auth/connect/', windowName, windowFeatures);
+            authWindow.focus();
+        });
+
+        $(document.body).on('click', 'a#unlinkSlackupConnect', function (e) {
+            e.preventDefault();
+            var unlink = confirm('Are you sure to unlink this account?');
+            if (!unlink) return;
+
+            window.localStorage.removeItem(slackupApiConf);
+            _showSlackupPrefDialog();
+        });
+
+        $(document.body).on('click', 'button#slackupBackup', function (e) {
+            e.preventDefault();
+            var $team = btoa(TS.model.team.id);
+            var $btnSc = $('button.btn-sc');
+            var $btn = $('button#slackupBackup');
+            var slackup = JSON.parse(window.localStorage.getItem(slackupApiConf));
+            var data = {token: slackup.apiToken, json: JSON.stringify(_getConfigSettings())};
+
+            $btnSc.attr('disabled', 'disabled');
+            $btn.button('loading');
+            $.post(slackupConnectUrl + '/backup/team/' + $team, data, function (response) {
+                TS.ui.inline_saver.show({target: $btn, hide_msg: true});
+                $btnSc.removeAttr('disabled');
+                $btn.button('reset');
+                TS.info('slackup setting has been successfully backuped');
+            }).fail(function (xhr) {
+                $btn.button('reset');
+                $btnSc.removeAttr('disabled');
+                alert(xhr.responseJSON.message);
+                TS.error(xhr.responseJSON.message);
+            });
+        });
+
+        $(document.body).on('click', 'button#slackupRestore', function (e) {
+            e.preventDefault();
+            var $team = btoa(TS.model.team.id);
+            var $btnSc = $('button.btn-sc');
+            var $btn = $('button#slackupRestore');
+            var slackup = JSON.parse(window.localStorage.getItem(slackupApiConf));
+            var data = {token: slackup.apiToken};
+
+            $btnSc.attr('disabled', 'disabled');
+            $btn.button('loading');
+            $.get(slackupConnectUrl + '/restore/team/' + $team, data, function (json) {
+                _setupConfigFile(json)
+                TS.ui.inline_saver.show({target: $btn});
+                $btnSc.removeAttr('disabled');
+                $btn.button('reset');
+                TS.info('slackup setting has been successfully restored');
+            }).fail(function (xhr) {
+                $btn.button('reset');
+                $btnSc.removeAttr('disabled');
+                alert(xhr.responseJSON.message);
+                TS.error(xhr.responseJSON.message);
+            });
+        });
+
+        $(window).on('message', function (e) {
+            if (authWindow !== null) {
+                authWindow.close();
+            }
+
+            var data = e.originalEvent.data;
+            if (data == null) return;
+
+            var json = JSON.parse(data);
+            window.localStorage.setItem(slackupApiConf, data);
+            _showSlackupPrefDialog();
+        });
     };
 
     var script = document.createElement('script');
