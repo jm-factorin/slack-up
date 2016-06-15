@@ -29,11 +29,6 @@
             });
         }
 
-        function _rebuildClientPage() {
-            TS.client.channel_pane.rebuildStarredList();
-            TS.client.channel_pane.rebuildPublicPrivateChannelsList();
-        }
-
         function _getConfData(id) {
             var json = window.localStorage.getItem(sidebarSettingsPrefix + id);
             return json ? JSON.parse(json) : {"icon": "", "alias": ""};
@@ -48,31 +43,26 @@
         }
 
         function _renderSidebarName(html, type) {
+            var has_icon = false;
             var $div = $('<div>').html(html);
             var $name = $div.find('a.' + type + '_name').attr('href');
             var $id = $div.find('a.' + type + '_name').data(type + '-id');
             var icon = (type == 'group') ? 'ts_icon_lock' : 'ts_icon_channel_pane_hash';
-
             try {
                 var data = _getConfData($id);
                 if (!data.icon && !data.alias) return html;
-
                 var $ellipsis = $div.find('span.overflow_ellipsis');
                 $ellipsis.empty();
 
                 try {
                     var $prefix = $(TS.emoji.graphicReplace(data.icon, {force_img: true}));
                     if ($prefix.attr('src')) {
-                        $prefix.css('margin', '-2px 3px 0 ');
-                    } else {
-                        $prefix = $('<ts-icon>').attr('class', icon + ' prefix');
+                        $prefix.css('margin', '-2px 3px 0 0');
+                        has_icon = true;
                     }
-                } catch (e) {
-                    $prefix = $('<ts-icon>').attr('class', icon + ' prefix');
-                }
+                } catch (e) {}
 
-                if (type == 'group') $div.find('ts-icon').first().remove();
-
+                if (has_icon) $div.find('ts-icon').first().remove();
                 var $ch = data.alias ? data.alias : $name.split('/')[2];
                 $ellipsis.prepend($prefix);
                 $ellipsis.append($ch);
@@ -99,7 +89,7 @@
             var e = document.createEvent("HTMLEvents");
             e.initEvent("click");
             $("<a>", {
-                download: 'slack-up.' + TS.model.team.domain + '.config.json',
+                download: 'slackup.' + TS.model.team.domain + '.config.json',
                 href: URL.createObjectURL(blob)
             }).get(0).dispatchEvent(e);
         }
@@ -115,7 +105,8 @@
                     }));
                 }
             }
-            _rebuildClientPage();
+
+            TS.client.channel_pane.rebuild();
         }
 
         function _uploadConfigFile(e) {
@@ -215,7 +206,7 @@
                         'alias': TS.utility.htmlEntities($alias)
                     }));
 
-                    _rebuildClientPage();
+                    TS.client.channel_pane.rebuild();
                 }
             });
 
@@ -239,17 +230,12 @@
             _tsError(arguments[0])
         };
 
-        var _rebuildStarredList = TS.client.channel_pane.rebuildStarredList;
-        TS.client.channel_pane.rebuildStarredList = function () {
-            _rebuildStarredList();
-            _sortChannelList($('ul#starred-list'));
-        };
-
-        var _rebuildPublicPrivateChannelsList = TS.client.channel_pane.rebuildPublicPrivateChannelsList;
-        TS.client.channel_pane.rebuildPublicPrivateChannelsList = function () {
-            _rebuildPublicPrivateChannelsList();
-            _sortChannelList($('ul#channel-list'));
-        };
+        var _rebuildChannelPane = TS.client.channel_pane.rebuild;
+        TS.client.channel_pane.rebuild = function() {
+            var args = ["starred", "channels", "ims"];
+            args = (arguments.length == 0) ? args : arguments;
+            _rebuildChannelPane.apply(this, args);
+        }
 
         var _rebuildMsgs = TS.client.msg_pane.rebuildMsgs;
         TS.client.msg_pane.rebuildMsgs = function () {
@@ -277,6 +263,8 @@
         var _menuMessageActionItems = TS.templates.menu_message_action_items;
         TS.templates.menu_message_action_items = function (a) {
             var $div = $('<div>').html(_menuMessageActionItems(a));
+            if ($div.find('#delete_link').length > 0) return $div.html();
+
             var $li = $('<li>', {
                 "id": "hide_link",
                 "class": "danger",
@@ -366,7 +354,7 @@
         var _templatesPrefSidebar = TS.templates.prefs_sidebar;
         TS.templates.prefs_sidebar = function (a, b) {
             var html = _templatesPrefSidebar(a, b);
-            html += '<li><a data-section="slackup_settings">Slackup Options</a></li>';
+            html += '<li><a data-section="slackup_settings" class="sidebar_menu_list_item" >Slackup Options</a></li>';
             return html;
         };
 

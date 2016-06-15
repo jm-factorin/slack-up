@@ -1,9 +1,9 @@
 {
-    "name": "Slack-Up",
-    "version": "2.0.0",
+    "name": "Slackup",
+    "version": "2.1.0",
     "manifest_version": 2,
-    "short_name": "slack-up",
-    "description": "Level-up your slack page with DM/Channel alias + icons and 'Hide message' action button and etc",
+    "short_name": "slackup",
+    "description": "Level-up your slack page with DM/Channel alias and icons,'Hide message' button (optional) and etc",
     "icons": {
         "32": "icon/32.png",
         "45": "icon/45.png",
